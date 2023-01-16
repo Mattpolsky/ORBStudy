@@ -1,0 +1,106 @@
+---
+title: "Offensive Rebounding Rate Study"
+author: "Matt Polsky"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(kableExtra)
+library(dplyr)
+```
+
+# INTRODUCTION
+If you have coached, played, or watched basketball before, you have probably heard something similar to the phrase, *"three crash the glass, two get back."* This saying describes the balance between sending players to the offensive glass to fight for a second possession, and sending other players back to prevent easy fast-break buckets. However, this number is often different for each team. I have been on teams so undersized that we sent four players back on defense because adding those players to the glass wouldn't pay off the risk of the fast break buckets we would give up. On the other hand, some teams have such dominant offensive rebounding teams that they will send 4 or 5 players to the glass because they have a high enough likelihood to get offensive rebounds that it is worth the risk of giving up fast break buckets. 
+
+This interesting balance of offensive rebounding and getting back on defense raised a question: **Does higher offensive rebounding rate result in higher effective field goal percentage allowed? Furthermore, does this combination of offensive rebounding rate and effective field goal percentage allowed a good combination of indicators to estimate winrate?** I will consider those factors to study the effects of crashing the offensive glass.
+
+If offensive rebounding rebounding rate correlates with field goal percentage given up, which together correlate highly with winrate, teams should use that information to find how many of their guys to send to the glass to achieve a balance of offensive rebounding and getting back. If there is a clear trade-off between getting back on defense and getting offensive rebounds, teams will need to balance both to win as many games as possible.
+
+# DATA
+
+The dataset I will use to answer this question is a college basketball dataset created by Andrew Sundberg - a former statistics, economics, and data science student at Iowa State University. This dataset tracks 24 variables from every Division 1 college basketball team from their 2013-2021 seasons. There are 2,455 total observations ranging across these 24 variables. 
+
+However, in order to analyze our question of finding the most effective offensive rebounding rate, we will only take into account four variables - **Team**, **EFG_D**, **Offensive Rebounding Rate**, and a newly created variable **WINRATE**. WINRATE describes games won divided by games played. EFG_D is the Effective Field Goal Percentage Allowed, which will be used to evaluate the downside of sending a lot of people to the glass - easy fast-break buckets if they do not collect the offensive rebound. Offensive Rebounding Rate is an estimate of the percentage of available offensive rebounds a team grabbed per game - which is the positive side of sending lots of players to the glass. All of these numerical variables are averaged across the 9 college basketball seasons of this dataset by team. Below is a table headlining the first 10 rows of the data with our four variables of interest.
+
+```{r, echo=FALSE, error=FALSE, comment=FALSE, warning=FALSE, message=FALSE}
+Data = read_csv("~/Desktop/cbb.csv")
+CleanData = Data %>%
+  mutate(WINRATE = W/G) %>%
+  group_by(TEAM)%>%
+  summarize(TEAM=TEAM, WINRATE = mean(WINRATE), EFG_D = mean(EFG_D), ORB = mean(ORB))
+
+CleanData1 = CleanData[!duplicated(CleanData$TEAM), ]
+
+
+kbl(head(CleanData1,10)) %>%
+  kable_classic()
+  
+```
+In order to glance at offensive rebounding rate with winrate, lets look at the top 10 teams in terms of winning percentage, and see if they have similar offensive rebounding rates.
+
+```{r, echo = FALSE}
+top10 = CleanData1 %>%
+  arrange(desc(WINRATE)) %>%
+  group_by(TEAM) 
+top10final = head(top10, 10)
+  
+
+y = ggplot(top10final, aes(x = factor(TEAM), y = ORB, fill = factor(TEAM))) + 
+  geom_bar(stat = "identity") +
+  xlab("TEAM") + 
+  ylab("Offensive Rebounding Rating")
+
+y1 <- y + guides(fill=guide_legend(title="Team")) + 
+  theme_classic() + 
+  theme(axis.text.x=element_blank(),
+      axis.ticks.x=element_blank())
+y1
+```
+
+As you can see, the 10 most winning teams from 2013-2021 have similar offensive rebounding rates (close to 30%). 
+
+# RESULTS
+To evaluate if higher offensive rebounding rates directly correlate with winrate, I ran a linear model with the independent variable offensive rebounding rate and dependent variable winrate, to see if there is a good correlation. I then ran a residual vs. fitted plot to see if the residuals are close to the actual values, and to see if offensive rebounding rate is truly a big effect on winrate.
+
+```{r, echo = FALSE}
+model1 = lm(WINRATE~ORB, data = CleanData1)
+plot(model1, 1)
+```
+
+As we can see, ORB has a good correlation with winrate, as the residuals are all fairly close to the midline. To further look into how ORB + EFG_D has an impact on winrate, I ran a linear model adding EFG_D as an explanatory variable as well.
+
+```{r, echo= FALSE}
+model2 = lm(WINRATE~ORB + EFG_D, data = CleanData1)
+plot(model2, 1)
+```
+
+From this plot, we notice that the residuals become much closer to the midline when we throw in the EFG_D variable. This shows that ORB and EFG_D have a profound effect on winrate together.
+
+The second linear model that produces accurate residuals is followed by the equation WINRATE = 2.538767 + 0.002789(ORB) - 0.042264(EFG_D). An accurate combination of values to make a 75% winning team based on this model could be a team with an ORB of 30, and EFG_D of 44.3. If you increase the ORB to 40, you would then give up an EFG_D of 45 to achieve a 75% winrate. Every time a team's offensive rebounding rate increases, it can afford to give up a higher EFG_D to produce the same winning percentage. Vice versa, every time the offensive rebounding rate decreases, it has to give up a lower EFG_D to maintain the winrate. These could go hand in hand with each other - the more people that crash the offensive glass, the fewer will be able to get back, and they will give up easier, more efficient shots. 
+
+Lastly, to evaluate if higher offensive rebounding rate correlates with higher effective field goal percentage allowed, as I hypothesized, I will create a linear model with offensive rebounding rate being the explanatory variable for effective field goal percentage allowed.
+
+```{r, echo = FALSE}
+model3 = lm(EFG_D~ORB, data = CleanData1)
+model3
+plot(model3, 1)
+```
+This linear model is written as followed : EFG_D = 59.5714 - 0.3201 ORB. As you can see from the residual vs fitted plot as well, ORB seems to be a good indicator of EFG_D. This actually disproves my original hypothesis that higher offensive rebounding rate will result in a higher effective field goal percentage allowed. As you can see from the equation of the model, EFG_D and ORB are negatively correlated.
+ 
+
+# CONCLUSION
+
+
+  I started this study to answer the following questions: Does higher offensive rebounding rate result in higher effective field goal percentage allowed? Furthermore, is this combination of offensive rebounding rate and effective field goal percentage allow a good combination of indicators to estimate winrate? The results I found were clear - offensive rebounding rate is not proven to be a good estimator of a team's field goal percentage allowed. However, a team's offensive rebounding rate and effective field goal percentage allowed together are a good combination of indicators to estimate their winrate.
+
+  As an avid basketball player and fan for many years, the first result surprised me. It would make sense that a higher offensive rebounding rate would mean more players crash the offensive glass, which would leave fewer to get back and prevent fast break layups. Although that theory was disproved in this study, further analysts should look into other confounding variables. What if a team just sends one dominant offensive rebounding center to the glass, and all four other players get back on defense? That would result in a high offensive rebounding rate and a low effective field goal percentage given up. A way future analysts could evaluate this question further is to look at the number of players sent to the glass rather than the offensive rebounding rate - that would eliminate the possibility of skill of the offensive rebounders and look solely at how many crash the glass and get back.
+  
+  The second result was that offensive rebounding rate and effective field goal percentage allowed together were very clear indicators of winrate. This result can be used by college basketball coaches. With the emergence of more specific analytics looking into 3 point shooting, how many dribbles to use, etc., it is still clear that offensive boards and defensive balance are staples to winning in college basketball. Coaches should use this result to show their teams that they need to focus on getting second-chance opportunities while also sending enough guys back to stop fast breaks, and ultimately that would help many teams win games. This could also be useful in recruiting if teams are able to identify that they are flawed in those two categories. 
+  
+  Although linear models are clear and generally useful, more specific modeling techniques could have yielded more accurate results in this study. I also believe that it would be useful for future analysts to group teams into different studies rather than look at all division one programs as a whole. A small school in the middle of Idaho would play much differently than a blue-blood program simply because they do not have comparable talent. Their data might skew the results of the other group and vice versa.
